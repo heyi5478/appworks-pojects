@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "deploy": "npm run build && node ./ghpages.js"
+  },
+  "devDependencies": {
+    "gh-pages": "^4.0.0"
+  }
+}

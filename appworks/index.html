@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>what for lunch</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-iYQeCzEYFbKjA/T2uDLTpkwGzCiq6soy8tYaI1GyVh/UjpbCx/TYkiZhlZB6+fzT" crossorigin="anonymous">
+    <link rel="stylesheet" href="./position.css">
+
+</head>
+
+<body style="margin: 0;">
+
+    <nav class="navbar">
+        <!-- 左側超連結 -->
+        <a href="#" class="navbar-brand">午餐吃什麼?</a>
+        <!-- 右側的超連結清單 -->
+        <div class="navbar-list">
+            <a href="./form/form.html">問題回報</a>
+
+        </div>
+        <!-- 手機版切換導覽列顯示按鈕 -->
+        <button class="navbar-toggler">
+            <div class="line"></div>
+        </button>
+    </nav>
+
+    <div style="display: flex;">
+        <div id="map" style="width: 50%; height:100vh;"></div>
+        <div style="padding: 16px">
+            <h3>午餐吃什麼?</h3>
+            <input id="search-input" class="form-control" />
+            <button class="btn btn-primary mt-2 " id="add">加入我的最愛</button>
+
+            <h4 class="mt-4">我的最愛</h4>
+            <ul class="list-group list-group-flush list-group-numbered" id="restaurant-list"></ul>
+            <button id="draw" class="btn btn-success mt-2">抽籤</button>
+
+            <div id="wheel" style="
+            position: fixed;
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background-color: rgba(0, 0, 0, 0.3);
+            display: none;">
+                <canvas id="canvas" width="600" height="600" style="
+                position: absolute; 
+                left: 50%; 
+                top: 50%;
+                transform: translate(-50%, -50%);
+                "></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="./Winwheel.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <script src="./main.js"></script>
+    <script>
+        let map;
+        let currentPosition;
+        let seclectRestaurant;
+        let marker;
+        let directionsService;
+        let directionsRenderer;
+        let infoWindow;
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 23.553118, lng: 121.0211024 },
+                zoom: 7,
+            });
+
+            navigator.geolocation.getCurrentPosition(function (position) {
+                currentPosition = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                };
+
+                map.setCenter(currentPosition);
+                map.setZoom(16);
+
+                const autocomplete = new google.maps.places.Autocomplete(
+                    document.getElementById('search-input'),
+                    {
+                        types: ['restaurant'],
+                        bounds: {
+                            east: currentPosition.lng + 0.001,
+                            west: currentPosition.lng - 0.001,
+                            south: currentPosition.lat - 0.001,
+                            north: currentPosition.lat + 0.001,
+                        },
+                        strictBounds: false,
+                    }
+                );
+
+                autocomplete.addListener('place_changed', function () {
+                    const place = autocomplete.getPlace();
+
+                    // console.log(place);
+                    seclectRestaurant = {
+                        location: place.geometry.location,
+                        placeId: place.place_id,
+                        name: place.name,
+                        address: place.formatted_address,
+                        phoneNumber: place.formatted_phone_number,
+                        rating: place.rating,
+                    };
+
+                    // console.log(seclectRestaurant);
+                    map.setCenter(seclectRestaurant.location);
+
+                    if (!marker) {
+                        marker = new google.maps.Marker({
+                            map: map,
+                        });
+                    }
+
+                    marker.setPosition(seclectRestaurant.location);
+
+                    if (!directionsService) {
+                        directionsService = new google.maps.DirectionsService();
+                    }
+
+                    if (!directionsRenderer) {
+                        directionsRenderer = new google.maps.DirectionsRenderer({
+                            map: map,
+                        });
+                    }
+
+                    directionsRenderer.set('directions', null);
+
+                    directionsService.route(
+                        {
+                            origin: new google.maps.LatLng(
+                                currentPosition.lat,
+                                currentPosition.lng
+                            ),
+                            destination: {
+                                placeId: seclectRestaurant.placeId,
+                            },
+                            travelMode: 'WALKING',
+                        }, function (response, status) {
+                            if (status === 'OK') {
+                                directionsRenderer.setDirections(response);
+
+                                if (!infoWindow) {
+                                    infoWindow = new google.maps.InfoWindow();
+                                }
+
+                                infoWindow.setContent(
+                                    `
+        <h3>${seclectRestaurant.name}</h3>
+        <div>${seclectRestaurant.address}</div>
+        <div>${seclectRestaurant.phoneNumber}</div>
+        <div>${seclectRestaurant.rating}</div>
+        <div>步行時間:${response.routes[0].legs[0].duration.text}</div>
+
+        `
+                                );
+                                infoWindow.open(map, marker);
+                            }
+                        }
+                    );
+                });
+            });
+        }
+
+        const restaurantList = JSON.parse(localStorage.getItem('restaurantList')) || [];
+        restaurantList.forEach(function (restaurant) {
+            document.getElementById('restaurant-list').innerHTML += `
+            <li class="list-group-item">
+                ${restaurant.name}
+                <button class="btn-close float-end remove"></button>
+                </li>
+            `
+        });
+
+        const colors = ['#eae56f', '#89f26e', '#7de6ef', '#e7706f'];
+
+        const wheel = new Winwheel({
+            numSegments: restaurantList.length,
+            segments: restaurantList.map((restaurant, index) => {
+                return {
+                    fillStyle: colors[index % 4],
+                    text: restaurant.name,
+                    strokeStyle: 'white',
+                };
+            }),
+            pins: true,
+            animation: {
+                type: 'spinToStop',
+                spins: 16,
+                easing: 'Power4.easeInOut',
+                callbackFinished: function (segment) {
+                    document.getElementById('wheel').style.display = 'none';
+                    wheel.rotationAngle = 0;
+                    wheel.draw();
+
+                    window.alert(segment.text);
+                    const restaurantList =
+                        JSON.parse(localStorage.getItem('restaurantList')) || [];
+                    seclectRestaurant = restaurantList.find(function (restaurant) {
+                        return restaurant.name === segment.text;
+                    });
+
+                    map.setCenter(seclectRestaurant.location);
+
+                    if (!marker) {
+                        marker = new google.maps.Marker({
+                            map: map,
+                        });
+                    }
+
+                    marker.setPosition(seclectRestaurant.location);
+
+                    if (!directionsService) {
+                        directionsService = new google.maps.DirectionsService();
+                    }
+
+                    if (!directionsRenderer) {
+                        directionsRenderer = new google.maps.DirectionsRenderer({
+                            map: map,
+                        });
+                    }
+
+                    directionsRenderer.set('directions', null);
+
+                    directionsService.route(
+                        {
+                            origin: new google.maps.LatLng(
+                                currentPosition.lat,
+                                currentPosition.lng
+                            ),
+                            destination: {
+                                placeId: seclectRestaurant.placeId,
+                            },
+                            travelMode: 'WALKING',
+                        }, function (response, status) {
+                            if (status === 'OK') {
+                                directionsRenderer.setDirections(response);
+
+                                if (!infoWindow) {
+                                    infoWindow = new google.maps.InfoWindow();
+                                }
+
+                                infoWindow.setContent(
+                                    `
+        <h3>${seclectRestaurant.name}</h3>
+        <div>${seclectRestaurant.address}</div>
+        <div>${seclectRestaurant.phoneNumber}</div>
+        <div>${seclectRestaurant.rating}</div>
+        <div>步行時間:${response.routes[0].legs[0].duration.text}</div>
+
+        `
+                                );
+                                infoWindow.open(map, marker);
+                            }
+                        }
+                    );
+                },
+            },
+        });
+
+        document.getElementById('add').addEventListener('click', function () {
+            document.getElementById('restaurant-list').innerHTML += `
+            <li class="list-group-item">
+                ${seclectRestaurant.name}
+                <button class="btn-close float-end remove"></button>
+                </li>
+            `
+            const restaurantList = JSON.parse(localStorage.getItem('restaurantList')) || [];
+
+            const color = colors[restaurantList.length % 4]
+            wheel.addSegment({
+                fillStyle: color,
+                text: seclectRestaurant.name,
+                strokeStyle: 'white',
+            });
+            wheel.draw();
+
+            restaurantList.push(seclectRestaurant);
+            localStorage.setItem('restaurantList', JSON.stringify(restaurantList));
+        })
+
+        document.getElementById('restaurant-list').addEventListener('click', function (e) {
+            if (e.target.classList.contains('remove')) {
+                e.target.parentNode.remove();
+                const restaurantName = e.target.parentNode.innerText.trim();
+
+                const restaurantList = JSON.parse(localStorage.getItem('restaurantList')) || [];
+
+                const index = restaurantList.findIndex(function (restaurant) {
+                    return restaurant.name === restaurantName
+                });
+                wheel.deleteSegment(index + 1);
+                wheel.draw();
+
+                const newRestaurantList = restaurantList.filter(function (restaurant) {
+                    if (restaurant.name === restaurantName) return false;
+                    return true;
+                })
+                localStorage.setItem('restaurantList', JSON.stringify(newRestaurantList));
+            }
+        })
+
+        document.getElementById('draw').addEventListener('click', function () {
+            document.getElementById('wheel').style.display = 'block';
+            wheel.startAnimation();
+        })
+    </script>
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCU1bzVhgyKdDGWn3PQP1EQThPi45E-4GQ&libraries=places&callback=initMap&region=TW&language=zh-TW">
+        </script>
+</body>
+
+</html>
